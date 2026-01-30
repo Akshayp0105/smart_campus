@@ -1,117 +1,232 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import {
+  BarChart3,
+  Clock,
+  CheckCircle2,
+  AlertTriangle
+} from "lucide-react"
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer
+} from "recharts"
+
 import { AnimatedCard } from "@/components/ui/animated-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+
+import { db } from "@/lib/firebase"
 import {
-    BarChart3,
-    Clock,
-    CheckCircle2,
-    AlertTriangle,
-    ArrowUpRight
-} from "lucide-react"
-import Link from "next/link"
+  collection,
+  getDocs,
+  Timestamp
+} from "firebase/firestore"
 
-export default function AdminPage() {
-    return (
-        <div className="p-8 space-y-8">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2">Admin Overview</h1>
-                    <p className="text-muted-foreground">Monitor campus health and issue resolution metrics.</p>
-                </div>
-                <div className="flex gap-4">
-                    <Button variant="outline">Export Report</Button>
-                    <Button asChild><Link href="/admin/heatmap">View Heatmap</Link></Button>
-                </div>
-            </div>
+/* ---------------- TYPES ---------------- */
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatsCard
-                    title="Total Issues"
-                    value="1,284"
-                    trend="+12%"
-                    icon={BarChart3}
-                    delay={0}
-                />
-                <StatsCard
-                    title="Resolution Time"
-                    value="4.2h"
-                    trend="-8%"
-                    positive
-                    icon={Clock}
-                    delay={0.1}
-                />
-                <StatsCard
-                    title="Resolved Today"
-                    value="24"
-                    trend="+4"
-                    icon={CheckCircle2}
-                    delay={0.2}
-                />
-                <StatsCard
-                    title="Critical Alerts"
-                    value="3"
-                    trend="Active"
-                    trendColor="text-red-500"
-                    icon={AlertTriangle}
-                    delay={0.3}
-                />
-            </div>
-
-            {/* Main Content Split */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Recent Issues List - Takes 2/3 */}
-                <div className="lg:col-span-2 space-y-6">
-                    <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
-                    <div className="space-y-4">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                            <AnimatedCard key={i} className="flex items-center justify-between p-4 py-3" delay={i * 0.05}>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
-                                        #24{i}
-                                    </div>
-                                    <div>
-                                        <div className="font-medium text-sm">Main Hall Light Malfunction</div>
-                                        <div className="text-xs text-muted-foreground">Reported 2h ago by John Doe</div>
-                                    </div>
-                                </div>
-                                <Badge variant={i % 2 === 0 ? "open" : "inprogress"}>
-                                    {i % 2 === 0 ? "Open" : "In Progress"}
-                                </Badge>
-                            </AnimatedCard>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Chart Placeholder / Categories - Takes 1/3 */}
-                <div className="space-y-6">
-                    <h2 className="text-xl font-semibold tracking-tight">Categories</h2>
-                    <AnimatedCard className="h-[400px] flex items-center justify-center bg-muted/20 border-dashed">
-                        <div className="text-center text-muted-foreground">
-                            <BarChart3 className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                            <span>Chart Visualization Placeholder</span>
-                        </div>
-                    </AnimatedCard>
-                </div>
-            </div>
-        </div>
-    )
+interface Report {
+  id: string
+  category: string
+  description: string
+  status: string
+  userId?: string
+  createdAt?: Timestamp
 }
 
-function StatsCard({ title, value, trend, trendColor, positive, icon: Icon, delay }: any) {
+/* ---------------- PAGE ---------------- */
+
+export default function AdminPage() {
+  const [reports, setReports] = useState<Report[]>([])
+  const [loading, setLoading] = useState(true)
+
+  /* ---------- FETCH DATA ---------- */
+  useEffect(() => {
+    const fetchReports = async () => {
+      const snap = await getDocs(collection(db, "reports"))
+      const data = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Report[]
+
+      setReports(data)
+      setLoading(false)
+    }
+
+    fetchReports()
+  }, [])
+
+  /* ---------- STATS ---------- */
+  const totalIssues = reports.length
+
+  const resolvedToday = reports.filter(r => {
+    if (!r.createdAt) return false
+    const today = new Date()
+    const created = r.createdAt.toDate()
     return (
-        <AnimatedCard delay={delay}>
-            <div className="flex items-center justify-between mb-4">
-                <Icon className="w-5 h-5 text-muted-foreground" />
-                <span className={cn("text-xs font-medium px-2 py-1 rounded-full bg-muted", trendColor || (positive ? "text-emerald-600 bg-emerald-50" : "text-muted-foreground"))}>
-                    {trend}
-                </span>
-            </div>
-            <div className="text-3xl font-bold tracking-tight mb-1">{value}</div>
-            <div className="text-sm text-muted-foreground">{title}</div>
-        </AnimatedCard>
+      r.status === "resolved" &&
+      created.toDateString() === today.toDateString()
     )
+  }).length
+
+  const criticalAlerts = reports.filter(
+    r => r.status === "urgent"
+  ).length
+
+  /* ---------- CATEGORY CHART DATA ---------- */
+  const categoryData = useMemo(() => {
+    const map: Record<string, number> = {}
+
+    reports.forEach(r => {
+      map[r.category] = (map[r.category] || 0) + 1
+    })
+
+    return Object.entries(map).map(([name, value]) => ({
+      name,
+      value
+    }))
+  }, [reports])
+
+  /* ---------- SAFE HELPERS ---------- */
+  const shortUser = (id?: string) =>
+    id ? id.slice(0, 6) : "Unknown"
+
+  /* ---------- UI ---------- */
+  return (
+    <div className="p-8 space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">
+            Admin Overview
+          </h1>
+          <p className="text-muted-foreground">
+            Monitor campus health and issue resolution metrics.
+          </p>
+        </div>
+        <div className="flex gap-4">
+          <Button variant="outline">Export Report</Button>
+          <Button asChild>
+            <Link href="/admin/heatmap">View Heatmap</Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatsCard title="Total Issues" value={totalIssues} icon={BarChart3} />
+        <StatsCard title="Resolved Today" value={resolvedToday} icon={CheckCircle2} />
+        <StatsCard title="Critical Alerts" value={criticalAlerts} icon={AlertTriangle} />
+        <StatsCard title="Avg Resolution" value="—" icon={Clock} />
+      </div>
+
+      {/* Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Recent Activity */}
+        <div className="lg:col-span-2 space-y-6">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Recent Activity
+          </h2>
+
+          {loading ? (
+            <p className="text-muted-foreground text-sm">Loading…</p>
+          ) : reports.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No reports yet.
+            </p>
+          ) : (
+            reports.slice(0, 5).map((r, i) => (
+              <AnimatedCard
+                key={r.id}
+                delay={i * 0.05}
+                className="flex items-center justify-between p-4"
+              >
+                <div>
+                  <div className="font-medium">
+                    {r.category} Issue
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Reported by {shortUser(r.userId)}
+                  </div>
+                </div>
+
+                <Badge
+                  variant={
+                    r.status === "resolved"
+                      ? "success"
+                      : r.status === "urgent"
+                      ? "destructive"
+                      : "open"
+                  }
+                >
+                  {r.status}
+                </Badge>
+              </AnimatedCard>
+            ))
+          )}
+        </div>
+
+        {/* Categories Chart */}
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Categories
+          </h2>
+
+          <AnimatedCard className="h-[400px] p-4">
+            {categoryData.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                No data available
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryData}>
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar
+                    dataKey="value"
+                    radius={[6, 6, 0, 0]}
+                    fill="currentColor"
+                    className="text-primary"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </AnimatedCard>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------- STATS CARD ---------------- */
+
+function StatsCard({
+  title,
+  value,
+  icon: Icon
+}: {
+  title: string
+  value: number | string
+  icon: any
+}) {
+  return (
+    <AnimatedCard>
+      <div className="flex items-center justify-between mb-4">
+        <Icon className="w-5 h-5 text-muted-foreground" />
+      </div>
+      <div className="text-3xl font-bold tracking-tight mb-1">
+        {value}
+      </div>
+      <div className="text-sm text-muted-foreground">
+        {title}
+      </div>
+    </AnimatedCard>
+  )
 }

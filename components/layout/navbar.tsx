@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,18 +27,22 @@ export function Navbar() {
       transition={{ duration: 0.3 }}
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-        isScrolled
-          ? "bg-background/95 border-b"
-          : "bg-background"
+        isScrolled ? "bg-background/95 border-b" : "bg-background"
       )}
     >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">SC</span>
-            </div>
+
+          {/* LOGO */}
+          <Link href="/" className="flex items-center gap-3">
+            <Image
+              src="/pic1.jpeg"
+              alt="Smart Campus Logo"
+              width={36}
+              height={36}
+              priority
+              className="rounded-md object-cover"
+            />
             <span className="font-semibold text-lg hidden sm:block">
               Smart Campus
             </span>
@@ -115,7 +120,9 @@ export function Navbar() {
               >
                 About
               </Link>
+
               <hr className="border-border" />
+
               <Button variant="outline" asChild className="w-full">
                 <Link href="/login">Sign in</Link>
               </Button>

@@ -1,4 +1,4 @@
-// File: D:\Smart-Campus-Issue-Reporter\app\issues\page.tsx
+// File: C:\Users\LOQ\OneDrive\Desktop\SMART\Smart-Campus-Issue-Reporter\app\issues\page.tsx
 import * as entry from '../../../../app/issues/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

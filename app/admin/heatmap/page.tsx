@@ -1,65 +1,144 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, Map } from "lucide-react"
-import Link from "next/link"
+import { useEffect, useRef } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "leaflet.heat";
+
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, MapPin } from "lucide-react";
+import Link from "next/link";
+
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+const CAMPUS_CENTER: [number, number] = [9.5916, 76.5222];
 
 export default function HeatmapPage() {
-    return (
-        <div className="h-screen flex flex-col relative bg-muted/20">
-            {/* Floating Header */}
-            <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
-                <div className="pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 rounded-xl px-4 py-3 shadow-sm flex items-center gap-4">
-                    <Button variant="ghost" size="icon" asChild className="-ml-2">
-                        <Link href="/admin"><ArrowLeft className="w-5 h-5" /></Link>
-                    </Button>
-                    <div>
-                        <h1 className="font-semibold text-sm">Campus Issue Heatmap</h1>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                            Live Updates
-                        </div>
-                    </div>
-                </div>
+  const mapRef = useRef<L.Map | null>(null);
 
-                <div className="pointer-events-auto bg-background/80 backdrop-blur-md border border-border/50 rounded-xl px-4 py-3 shadow-sm flex items-center gap-4 text-xs font-medium">
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-blue-500/20" /> Low Density
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-red-500" /> High Density
-                    </div>
-                </div>
-            </div>
+  useEffect(() => {
+    if (mapRef.current) return; // 🚫 prevent double init
 
-            {/* Map Container Placeholder */}
-            <div className="flex-1 w-full h-full flex items-center justify-center bg-[url('https://api.mapbox.com/styles/v1/mapbox/light-v10/static/0,0,2,0,0/1280x1280?access_token=Pk')] bg-cover bg-center relative overflow-hidden group">
-                <div className="absolute inset-0 bg-muted/10" />
+    const map = L.map("heatmap-container", {
+      center: CAMPUS_CENTER,
+      zoom: 16,
+    });
 
-                {/* Simulated Hotspots */}
-                <div className="absolute top-[30%] left-[40%]">
-                    <div className="w-24 h-24 bg-red-500/30 rounded-full blur-xl animate-pulse" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-4 h-4 bg-red-500 rounded-full shadow-lg border-2 border-white" />
-                    </div>
-                </div>
+    mapRef.current = map;
 
-                <div className="absolute top-[60%] left-[70%]">
-                    <div className="w-16 h-16 bg-orange-500/30 rounded-full blur-xl animate-pulse delay-100" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-3 h-3 bg-orange-500 rounded-full shadow-lg border-2 border-white" />
-                    </div>
-                </div>
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
 
-                <div className="absolute top-[45%] left-[25%]">
-                    <div className="w-20 h-20 bg-yellow-500/20 rounded-full blur-xl animate-pulse delay-300" />
-                </div>
+    const loadHeatmap = async () => {
+      const snap = await getDocs(collection(db, "reports"));
 
-                <div className="text-center space-y-2 relative z-0 opacity-50 select-none pointer-events-none">
-                    <Map className="w-12 h-12 mx-auto text-muted-foreground" />
-                    <p className="text-muted-foreground font-medium">Interactive Map Integration Ready</p>
-                </div>
-            </div>
+      const heatPoints: [number, number, number][] = [];
+
+      snap.forEach((doc) => {
+        const data = doc.data();
+
+        // ❗ only real coordinates
+        if (data.latitude && data.longitude) {
+          heatPoints.push([
+            data.latitude,
+            data.longitude,
+            0.8,
+          ]);
+
+          // visible marker
+          L.circleMarker([data.latitude, data.longitude], {
+            radius: 5,
+            fillColor: "#ef4444",
+            color: "#fff",
+            weight: 1,
+            fillOpacity: 1,
+          })
+            .bindPopup(`
+              <strong>${data.category}</strong><br/>
+              ${data.location}<br/>
+              Status: ${data.status}
+            `)
+            .addTo(map);
+        }
+      });
+
+      if (heatPoints.length > 0) {
+        // @ts-ignore
+        L.heatLayer(heatPoints, {
+          radius: 30,
+          blur: 20,
+          gradient: {
+            0.2: "#60a5fa",
+            0.5: "#facc15",
+            1.0: "#ef4444",
+          },
+        }).addTo(map);
+      }
+    };
+
+    loadHeatmap();
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  const locateAdmin = () => {
+    if (!navigator.geolocation || !mapRef.current) return;
+
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const coords: [number, number] = [
+        pos.coords.latitude,
+        pos.coords.longitude,
+      ];
+
+      L.circleMarker(coords, {
+        radius: 8,
+        fillColor: "#2563eb",
+        color: "#fff",
+        weight: 2,
+        fillOpacity: 1,
+      })
+        .bindPopup("You are here")
+        .addTo(mapRef.current!);
+
+      mapRef.current!.setView(coords, 17);
+    });
+  };
+
+  return (
+    <div className="h-screen flex flex-col relative bg-muted/20">
+      {/* Header */}
+      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
+        <div className="pointer-events-auto bg-background/80 backdrop-blur-md border rounded-xl px-4 py-3 shadow-sm flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/admin">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="font-semibold text-sm">Campus Issue Heatmap</h1>
+            <p className="text-xs text-muted-foreground">
+              Real reported locations
+            </p>
+          </div>
         </div>
-    )
+
+        <Button
+          onClick={locateAdmin}
+          className="pointer-events-auto"
+          variant="outline"
+        >
+          <MapPin className="w-4 h-4 mr-2" />
+          My Location
+        </Button>
+      </div>
+
+      {/* Map */}
+      <div id="heatmap-container" className="flex-1" />
+    </div>
+  );
 }
